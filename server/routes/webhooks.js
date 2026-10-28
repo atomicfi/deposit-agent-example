@@ -31,7 +31,7 @@ function handleTaskStatusUpdated(event) {
   const distributionType = event.data?.distributionType ?? null;
   const distributionAmount = event.data?.distributionAmount ?? null;
   // Every event is stored, along with the raw webhook.
-  const { alreadyFinished } = saveTaskStatusUpdatedEvent({
+  saveTaskStatusUpdatedEvent({
     taskId,
     userIdentifier,
     companyId,
@@ -43,12 +43,11 @@ function handleTaskStatusUpdated(event) {
     payload: event,
   });
   console.log(
-    `[webhook] task=${taskId} user=${userIdentifier} company=${companyName} status=${status} reason=${reason} distribution=${distributionType}:${distributionAmount} alreadyFinished=${alreadyFinished}`,
+    `[webhook] task=${taskId} user=${userIdentifier} company=${companyName} status=${status} reason=${reason} distribution=${distributionType}:${distributionAmount}`,
   );
 
-  // Tell the agent only the first time a task finishes, not on repeat deliveries.
   const finished = status === "completed" || status === "failed";
-  if (finished && !alreadyFinished) {
+  if (finished) {
     // Only these fields go to the agent: the raw webhook also carries the
     // user's public token, which the model shouldn't see.
     enqueueSystemEvent(userIdentifier, "task-status-updated", {

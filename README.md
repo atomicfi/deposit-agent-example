@@ -26,7 +26,7 @@ Everything the agent responds to goes through one queue. Three things write to i
 
 - **The user's messages** go to `POST /user-message`, and the server queues them.
 - **Transact SDK events**: when the user leaves the Atomic screen, the app sends the SDK's `onFinish` or `onClose` payload to `POST /transact-events`. The server queues it as a system event, so the agent can check on the task and follow up.
-- **Atomic webhooks** arrive at `POST /webhooks/atomic/deposit-agent`. Each `task-status-updated` event for the `deposit` product is saved to SQLite as its own row, raw payload included, so a task's whole history is kept. When a task first finishes (`completed` or `failed`), the server also queues it, with the failure reason or how much of the paycheck moved.
+- **Atomic webhooks** arrive at `POST /webhooks/atomic/deposit-agent`. Each `task-status-updated` event for the `deposit` product is saved to SQLite as its own row, raw payload included, so a task's whole history is kept. When a task finishes (`completed` or `failed`), the server also queues it, with the failure reason or how much of the paycheck moved.
 - **The agent** sees system events as `<system_event type="…">` messages the user never sees. Its system prompt says how to respond to each type.
 - **Replies** go to the app over the WebSocket, along with `busy` (for the typing indicator) and `error` events. Each user has one thread, keyed by their user ID.
 
@@ -164,4 +164,4 @@ curl -X POST localhost:3000/webhooks/atomic/deposit-agent -H 'content-type: appl
 }'
 ```
 
-The agent's message should appear in the chat a few seconds later. Repeat deliveries of a finished task are still stored, but the agent hears only the first, so use a new `task` value each time.
+The agent's message should appear in the chat a few seconds later.

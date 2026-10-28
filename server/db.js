@@ -68,10 +68,8 @@ db.exec(`
     ON task_status_update_events (user_identifier, task_id)
 `)
 
-// Stores one event. reason says why a failed task failed. Atomic retries
-// deliveries, so the same status can arrive more than once, and a late
-// 'processing' can arrive after the task finished. Returns whether the task had
-// already finished (completed or failed) before this event.
+// Stores one event. reason says why a failed task failed. Atomic sends each
+// task two events: 'processing' when it starts, then 'completed' or 'failed'.
 export function saveTaskStatusUpdatedEvent({
   taskId,
   userIdentifier,
@@ -83,13 +81,6 @@ export function saveTaskStatusUpdatedEvent({
   distributionAmount,
   payload
 }) {
-  const alreadyFinished = Boolean(
-    db.prepare(`
-      SELECT 1 FROM task_status_update_events
-      WHERE task_id = ? AND status IN ('completed', 'failed')
-      LIMIT 1
-    `).get(taskId)
-  )
   db.prepare(`
     INSERT INTO task_status_update_events
       (task_id, user_identifier, company_id, company_name, status, reason,
@@ -106,18 +97,13 @@ export function saveTaskStatusUpdatedEvent({
     distributionAmount ?? null,
     JSON.stringify(payload)
   )
-  return { alreadyFinished }
 }
 
-// The latest event for each of the user's tasks, newest first. Once a task has
-// finished, its finished event wins over any late 'processing' retry.
+// The latest event for each of the user's tasks, newest first.
 export function getTaskStatusUpdatedEvents(userIdentifier, limit = 10) {
   return db.prepare(`
     WITH ranked AS (
-      SELECT *, ROW_NUMBER() OVER (
-        PARTITION BY task_id
-        ORDER BY status IN ('completed', 'failed') DESC, id DESC
-      ) AS rank
+      SELECT *, ROW_NUMBER() OVER (PARTITION BY task_id ORDER BY id DESC) AS rank
       FROM task_status_update_events
       WHERE user_identifier = ?
     )

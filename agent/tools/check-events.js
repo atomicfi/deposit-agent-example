@@ -11,11 +11,10 @@ explains how to read the result and what to tell the user.
   being about the switch the user just worked on if its company matches and it was received in the
   last 15 minutes; older events are from earlier switches.
 - events: task-status-updated webhooks for the user's deposit tasks, newest first: the latest event
-  for each task, where an event saying the task finished counts over a later 'processing' one. Each
-  event has task_id (the task it's about), company_id, company_name, status ('processing',
-  'completed', or 'failed'), reason (why it failed), distribution_type ('total', 'fixed', or
-  'percent'), distribution_amount (dollars for 'fixed', a percentage for 'percent', empty for
-  'total'), and received_at (UTC).`,
+  for each task. Each event has task_id (the task it's about), company_id, company_name, status
+  ('processing', 'completed', or 'failed'), reason (why it failed), distribution_type ('total',
+  'fixed', or 'percent'), distribution_amount (dollars for 'fixed', a percentage for 'percent',
+  empty for 'total'), and received_at (UTC).`,
 
   schema: {
     type: "object",
