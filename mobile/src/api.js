@@ -7,13 +7,15 @@ export function sendMessage(message) {
   return post('/user-message', { message })
 }
 
-// Forwards a Transact SDK event to the agent: event is 'finish' (onFinish), data
-// is the fields of the SDK's payload the agent uses. The agent's follow-up
-// arrives on the WebSocket.
+// Forwards a Transact SDK event to the agent: event is 'finish' (onFinish) or
+// 'close' (onClose), data is the fields of the SDK's payload the agent uses. The
+// agent's follow-up arrives on the WebSocket.
 export function sendTransactEvent(event, data) {
   return post('/transact-events', { event, data })
 }
 
+// Resolves to whether the server queued a turn for the agent (202). It answers
+// 204 when there's nothing for the agent to say, so no reply will come.
 async function post(path, body) {
   const res = await fetch(`${API_URL}${path}`, {
     method: 'POST',
@@ -24,6 +26,7 @@ async function post(path, body) {
     const data = await res.json().catch(() => ({}))
     throw new Error(data.error ?? `Server error ${res.status}`)
   }
+  return res.status === 202
 }
 
 // Listens on the user's thread and reconnects when the connection drops.

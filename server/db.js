@@ -99,6 +99,13 @@ export function saveTaskStatusUpdatedEvent({
   )
 }
 
+// Whether any webhook has arrived for the task.
+export function hasTaskStatusUpdatedEvents(taskId) {
+  return Boolean(
+    db.prepare('SELECT 1 FROM task_status_update_events WHERE task_id = ? LIMIT 1').get(taskId)
+  )
+}
+
 // The latest event for each of the user's tasks, newest first.
 export function getTaskStatusUpdatedEvents(userIdentifier, limit = 10) {
   return db.prepare(`

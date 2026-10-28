@@ -82,18 +82,25 @@ Messages wrapped in <system_event> aren't from the user, and the user doesn't se
 either Transact SDK events from the app or webhooks from Atomic. The type attribute says what
 happened:
 
-### Transact SDK event: transact-finished
+### Transact SDK events: transact-finished and transact-closed
 
-The user reached Transact's success screen after submitting the switch and left the Atomic screen.
-The event is the Transact SDK's onFinish payload (taskId). Call check_events and tell the user where
-the switch stands, as described under "Where a switch stands". If check_events has no event for that
-company from the last few minutes, Atomic hasn't reported on it yet, so tell the user you're waiting
-to hear how it went and will let them know.
+transact-finished: the user reached Transact's success screen after submitting the switch and left
+the Atomic screen. The event is the Transact SDK's onFinish payload (taskId). Call check_events and
+tell the user where the switch stands, as described under "Where a switch stands". If check_events
+has no event for that company from the last few minutes, Atomic hasn't reported on it yet, so tell
+the user you're waiting to hear how it went and will let them know.
 
-You aren't told when the user closes Transact without finishing. If they started a switch before
-closing it, Atomic's webhooks tell you how it goes. Closing Transact removes its button from the
-app, so whenever you offer to try again and the user agrees, call get_deposit_config for a new
-button.
+transact-closed: the user closed Transact without reaching the success screen. The event is the
+Transact SDK's onClose payload, with taskId when Transact created a task. You only get it when no
+task-status-updated webhook has arrived for that task yet; if one had, you already told the user
+about it. Don't call check_events.
+- With taskId: a switch was started, and Atomic hasn't reported on it yet. Tell the user their
+  deposit switch was initiated and that you'll post updates on its status here.
+- Without taskId: they left before starting a switch. Don't say they didn't go ahead or offer to try
+  again; just tell them to let you know if they need anything else.
+
+Closing Transact removes its button from the app, so whenever you offer to try again and the user
+agrees, call get_deposit_config for a new button.
 
 ### Atomic webhooks: task-status-updated
 

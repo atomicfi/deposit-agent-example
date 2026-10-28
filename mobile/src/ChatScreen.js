@@ -66,11 +66,12 @@ export default function ChatScreen() {
   }
 
   // Sends something to the agent's queue. Shows the typing indicator until the
-  // server reports on the turn.
+  // server reports on the turn, or right away hides it if nothing was queued.
   async function queueForAgent(request) {
     setBusy(true)
     try {
-      await request()
+      const queued = await request()
+      if (!queued) setBusy(false)
     } catch (err) {
       addError(
         err instanceof TypeError ? 'Could not reach the server. Please try again.' : err.message
@@ -141,8 +142,9 @@ export default function ChatScreen() {
             key={transactAction.id}
             action={transactAction}
             styles={styles}
-            // Tells the agent the user finished in Transact, so it can follow up.
+            // Tells the agent how the user left Transact, so it can follow up.
             onFinish={(data) => queueForAgent(() => sendTransactEvent('finish', data))}
+            onClose={(data) => queueForAgent(() => sendTransactEvent('close', data))}
           />
         )}
 
@@ -241,7 +243,7 @@ function Message({ item, styles, theme }) {
 
 // "Update Deposit": the user's confirmation. Only a
 // tap opens Transact.
-function TransactBar({ action, styles, onFinish }) {
+function TransactBar({ action, styles, onFinish, onClose }) {
   // idle → open (Transact on screen) → finished | closed
   const [status, setStatus] = useState('idle')
   // The company's logo from the backend, shown on the button when there is one.
@@ -257,9 +259,13 @@ function TransactBar({ action, styles, onFinish }) {
           setStatus('finished')
           onFinish?.(pick(data, ['taskId']))
         },
-        // Closing isn't an outcome, so the agent isn't told: if a switch
-        // started, Atomic's webhooks report on it.
-        onClose: () => setStatus((s) => (s === 'finished' ? s : 'closed'))
+        // Closing isn't an outcome: a switch may have started. Transact includes
+        // taskId when a task was created, though the SDK reference doesn't list it.
+        // https://docs.atomicfi.com/reference/transact-sdk#event-listeners__onclose
+        onClose: (data) => {
+          setStatus((s) => (s === 'finished' ? s : 'closed'))
+          onClose?.(pick(data, ['taskId']))
+        }
       })
     } catch (err) {
       console.warn('[transact] could not open', err)

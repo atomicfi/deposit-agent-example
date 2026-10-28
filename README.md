@@ -25,7 +25,7 @@ Everything the agent responds to goes through one queue. Three things write to i
 </picture>
 
 - **The user's messages** go to `POST /user-message`, and the server queues them.
-- **Transact SDK events**: when the user finishes in the Atomic screen, the app sends the SDK's `onFinish` payload to `POST /transact-events`. The server queues it as a system event, so the agent can check on the task and follow up. Closing Transact isn't sent: if a switch started, Atomic's webhooks report on it.
+- **Transact SDK events**: when the user leaves the Atomic screen, the app sends the SDK's `onFinish` or `onClose` payload to `POST /transact-events`, with the `taskId` when Transact created a task. The server queues it as a system event, so the agent can follow up: after a close, it tells the user a switch they started is under way. If a webhook for that task has already arrived, the agent has already told the user, so the server skips the close.
 - **Atomic webhooks** arrive at `POST /webhooks/atomic/deposit-agent`. Each `task-status-updated` event for the `deposit` product is saved to SQLite as its own row, raw payload included, so a task's whole history is kept. The server also queues each one for the agent: `processing` when the task starts, then `completed` or `failed`, with the failure reason or how much of the paycheck moved.
 - **The agent** sees system events as `<system_event type="…">` messages the user never sees. Its system prompt says how to respond to each type.
 - **Replies** go to the app over the WebSocket, along with `busy` (for the typing indicator) and `error` events. Each user has one thread, keyed by their user ID.
