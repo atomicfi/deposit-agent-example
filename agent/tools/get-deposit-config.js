@@ -1,5 +1,5 @@
 import { atomic } from '../../atomic/index.js'
-import { DEPOSIT_ACCOUNTS } from '../constants.js'
+import { getUserAccounts } from '../../server/db.js'
 
 export const getDepositConfig = {
   name: 'get_deposit_config',
@@ -62,9 +62,9 @@ Prepare Atomic's Transact SDK to switch the user's direct deposit at one company
       connectorId = undefined
     }
 
-    const { data } = await atomic.createAccessToken(ctx.userIdentifier, {
-      accounts: DEPOSIT_ACCOUNTS
-    })
+    // The accounts the paycheck can go to, from the app's own records.
+    const accounts = getUserAccounts(ctx.userIdentifier)
+    const { data } = await atomic.createAccessToken(ctx.userIdentifier, { accounts })
     return {
       output: { state: 'ready', company: company.name },
       clientAction: {

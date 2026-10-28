@@ -4,7 +4,7 @@ A deliberately small example of how an AI agent can use the [Atomic](https://ato
 
 The user chats with an assistant in a mobile app. The agent works out which employer or payroll provider pays them, by searching Atomic's company directory and asking follow-up questions: which franchisee runs their location, which of several payroll systems their employer uses, or which employer's Workday they sign in to. Once it has the company (and the payroll system, when there's a choice), the agent puts a button in the app that opens Atomic's Transact SDK straight on that company's sign-in. The user signs in to their payroll account there and makes the switch. Atomic's webhooks and the SDK's events go back to the agent, so it can tell the user how things went without being asked.
 
-It's meant to be read, not deployed. There's no login, state lives in memory or a local SQLite file, and webhooks aren't verified. Each of those is a place where a real integration would do more.
+The example can be deployed, but the goal is to show, as simply as possible, how an AI agent can work with Atomic's API, SDK and webhooks. Some things are left out for that reason: there's no login, state lives in memory or a local SQLite file, and webhooks aren't verified. Each of those is a place where a real integration would do more.
 
 ## Tech stack
 
@@ -37,13 +37,12 @@ When the agent wants the app to open Transact, a tool returns a `launch_transact
 ```
 agent/          The agent: model, system prompt, tools
   tools/        One file per tool
-  constants.js  The bank account the paycheck is switched to
 atomic/         A small client for the Atomic API
 server/
   index.js      Express app and WebSocket server
   queue.js      Per-thread message queue; runs the agent's turns
   bus.js        Sends events to the WebSockets listening on a thread
-  db.js         SQLite: the test user and stored webhook events
+  db.js         SQLite: the test user, their bank accounts and stored webhook events
   routes/       /user-message, /transact-events, /webhooks/atomic/deposit-agent
 mobile/         Expo app: chat screen, API client, Transact launcher
 ```
@@ -60,7 +59,7 @@ The agent has five tools. Each runs on the server, so Atomic credentials never r
 | `get_deposit_config` | Creates a public token and gives the app an "Update deposit at \<company\>" button. It opens Transact on a `deposit` task, deeplinked to the company's sign-in, and to a specific payroll system when the user chose one or named it (such as Workday). | `GET /company/:companyId/details`, `POST /access-token` |
 | `check_events` | Reads the latest event for each task from the stored webhooks, to tell the user whether a switch went through. | None. It reads the local database. |
 
-The bank account the paycheck goes to is set in [agent/constants.js](agent/constants.js). It's Atomic's example account, which works in the sandbox; in a real app it's the user's own account at your bank, and the model never sees it.
+The bank account the paycheck goes to comes from `getUserAccounts` in [server/db.js](server/db.js), which both tools call before creating an access token. It returns Atomic's example account, which works in the sandbox; in a real app it's the user's own account at your bank, and the model never sees it.
 
 ### The Transact config
 

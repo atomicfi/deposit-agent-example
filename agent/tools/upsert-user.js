@@ -1,5 +1,5 @@
 import { atomic } from '../../atomic/index.js'
-import { DEPOSIT_ACCOUNTS } from '../constants.js'
+import { getUserAccounts } from '../../server/db.js'
 
 export const upsertUser = {
   name: 'upsert_user',
@@ -24,7 +24,8 @@ every conversation, before any other tool.
     // existing one, along with the bank account their paycheck can go to. The
     // token itself is discarded; get_deposit_config makes its own when the app
     // needs one.
-    await atomic.createAccessToken(ctx.userIdentifier, { accounts: DEPOSIT_ACCOUNTS })
+    const accounts = getUserAccounts(ctx.userIdentifier)
+    await atomic.createAccessToken(ctx.userIdentifier, { accounts })
     return { state: 'ready' }
   }
 }

@@ -28,6 +28,22 @@ export function getCurrentUser() {
   return getUser(process.env.USER_IDENTIFIER)
 }
 
+// The bank accounts the user's paycheck can be switched to. A real app would
+// look up the user's own accounts at your bank; this returns Atomic's example
+// account, which works in the sandbox, for every user. Atomic shows title in
+// Transact.
+// https://docs.atomicfi.com/reference/api#access-token__create-access-token
+export function getUserAccounts(userId) {
+  return [
+    {
+      accountNumber: '220000000',
+      routingNumber: '110000000',
+      type: 'checking',
+      title: 'Premier Plus Checking'
+    }
+  ]
+}
+
 // Every task-status-updated webhook for the deposit product, one row per event,
 // so a task's whole history is kept. payload is the webhook exactly as Atomic
 // sent it. distribution_type is how much of the paycheck moves: 'total',
