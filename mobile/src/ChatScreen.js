@@ -25,7 +25,6 @@ import { useTheme } from './theme'
 const ATOMIC_LOGO = require('../assets/atomic-logo.png')
 
 const SUGGESTIONS = [
-  'Move my paycheck to this account',
   'I get paid through ADP',
   'Can I deposit just part of my paycheck?'
 ]
