@@ -42,7 +42,7 @@ app.use(express.json());
 // The user's chat messages, at /user-message.
 app.use("/user-message", userMessageRouter);
 
-// Transact SDK onFinish and onClose events from the app, at /transact-events.
+// Transact SDK onFinish events from the app, at /transact-events.
 app.use("/transact-events", transactEventsRouter);
 
 // Atomic webhooks, at /webhooks/atomic/deposit-agent.

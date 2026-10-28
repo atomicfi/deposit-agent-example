@@ -4,8 +4,8 @@ export const checkEvents = {
   name: 'check_events',
 
   description: `
-Check where the user's recent direct deposit switches stand. Call this after a transact-finished or
-transact-closed event, and when the user asks whether their switch went through. The system prompt
+Check where the user's recent direct deposit switches stand. Call this after a transact-finished
+event, and when the user asks whether their switch went through. The system prompt
 explains how to read the result and what to tell the user.
 - now: the current time (UTC), to tell recent events from earlier ones. Only count an event as
   being about the switch the user just worked on if its company matches and it was received in the

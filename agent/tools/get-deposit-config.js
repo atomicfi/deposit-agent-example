@@ -6,7 +6,7 @@ export const getDepositConfig = {
 
   description: `
 Prepare Atomic's Transact SDK to switch the user's direct deposit at one company. The app shows an
-"Update deposit at <company>" button that opens Transact straight on that company's sign-in.
+"Update Deposit" button that opens Transact straight on that company's sign-in.
 - Call it only once you know the company the user can sign in to as themselves: one specific
   employer, or a payroll system that needs nothing further. See the system prompt.
 - Pass the company's _id as companyId. Pass connectorId only when the user chose one of the
@@ -18,8 +18,9 @@ Prepare Atomic's Transact SDK to switch the user's direct deposit at one company
   system allows a choice. The paycheck goes to their account at this bank; you never need their
   account or routing number.
 - Never ask for the user's password. Atomic collects sign-in details itself.
-- After calling, tell the user to tap the button to continue. When they leave the Atomic screen, you
-  get a transact-finished or transact-closed event.
+- After calling, tell the user to tap the button to continue. When they finish in the Atomic screen,
+  you get a transact-finished event, and Atomic's webhooks tell you when the switch starts and
+  finishes.
 - The app shows only the newest button, so a new one replaces any earlier button; never tell the
   user to tap an earlier one.`,
 
@@ -70,7 +71,7 @@ Prepare Atomic's Transact SDK to switch the user's direct deposit at one company
       clientAction: {
         type: 'launch_transact',
         id: newId(),
-        label: `Update deposit at ${company.name}`,
+        label: 'Update Deposit',
         finishedLabel: `${company.name} deposit update submitted`,
         logo: company.branding?.logo?.url ? company.branding.logo : undefined,
         config: {

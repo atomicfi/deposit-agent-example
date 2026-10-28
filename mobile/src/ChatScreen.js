@@ -141,8 +141,8 @@ export default function ChatScreen() {
             key={transactAction.id}
             action={transactAction}
             styles={styles}
-            // Tells the agent how the user left Transact, so it can follow up.
-            onDone={(event, data) => queueForAgent(() => sendTransactEvent(event, data))}
+            // Tells the agent the user finished in Transact, so it can follow up.
+            onFinish={(data) => queueForAgent(() => sendTransactEvent('finish', data))}
           />
         )}
 
@@ -239,40 +239,27 @@ function Message({ item, styles, theme }) {
   )
 }
 
-// "Update deposit at <company>": the user's confirmation. Only a
+// "Update Deposit": the user's confirmation. Only a
 // tap opens Transact.
-function TransactBar({ action, styles, onDone }) {
+function TransactBar({ action, styles, onFinish }) {
   // idle → open (Transact on screen) → finished | closed
   const [status, setStatus] = useState('idle')
   // The company's logo from the backend, shown on the button when there is one.
   const logo = action.logo?.url ? action.logo : null
-  // Transact can report both finish and close; signal the agent once per open,
-  // with whichever came first.
-  const signalled = useRef(false)
-
-  function done(event, data) {
-    if (signalled.current) return
-    signalled.current = true
-    onDone?.(event, data)
-  }
 
   function open() {
     setStatus('open')
-    signalled.current = false
     try {
       launchTransact(action, {
         // Only the fields the agent uses go to it, under the SDK's own names:
         // https://docs.atomicfi.com/reference/transact-sdk#event-listeners__onfinish
         onFinish: (data) => {
           setStatus('finished')
-          done('finish', pick(data, ['taskId']))
+          onFinish?.(pick(data, ['taskId']))
         },
-        // Closing isn't an outcome: Transact may keep working briefly after.
-        onClose: (data) => {
-          setStatus((s) => (s === 'finished' ? s : 'closed'))
-          // https://docs.atomicfi.com/reference/transact-sdk#event-listeners__onclose
-          done('close', pick(data, ['reason']))
-        }
+        // Closing isn't an outcome, so the agent isn't told: if a switch
+        // started, Atomic's webhooks report on it.
+        onClose: () => setStatus((s) => (s === 'finished' ? s : 'closed'))
       })
     } catch (err) {
       console.warn('[transact] could not open', err)

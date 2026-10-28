@@ -1,5 +1,5 @@
-// Atomic webhooks. task-status-updated (for the deposit product) is stored, and queued for the
-// agent when a task finishes; other events are acknowledged so Atomic doesn't retry them.
+// Atomic webhooks. task-status-updated (for the deposit product) is stored and queued for the
+// agent; other events are acknowledged so Atomic doesn't retry them.
 import { Router } from "express";
 import { saveTaskStatusUpdatedEvent } from "../db.js";
 import { enqueueSystemEvent } from "../queue.js";
@@ -17,7 +17,8 @@ webhookRouter.post("/atomic/deposit-agent", (req, res) => {
   res.sendStatus(204);
 });
 
-// Tells the agent when a deposit switch finishes.
+// Tells the agent when a deposit switch starts ('processing') and when it
+// finishes ('completed' or 'failed').
 // https://docs.atomicfi.com/reference/webhooks#tasks__task-status-updated
 function handleTaskStatusUpdated(event) {
   const taskId = event.task;
@@ -46,17 +47,14 @@ function handleTaskStatusUpdated(event) {
     `[webhook] task=${taskId} user=${userIdentifier} company=${companyName} status=${status} reason=${reason} distribution=${distributionType}:${distributionAmount}`,
   );
 
-  const finished = status === "completed" || status === "failed";
-  if (finished) {
-    // Only these fields go to the agent: the raw webhook also carries the
-    // user's public token, which the model shouldn't see.
-    enqueueSystemEvent(userIdentifier, "task-status-updated", {
-      companyId,
-      companyName,
-      status,
-      reason,
-      distributionType,
-      distributionAmount,
-    });
-  }
+  // Only these fields go to the agent: the raw webhook also carries the
+  // user's public token, which the model shouldn't see.
+  enqueueSystemEvent(userIdentifier, "task-status-updated", {
+    companyId,
+    companyName,
+    status,
+    reason,
+    distributionType,
+    distributionAmount,
+  });
 }

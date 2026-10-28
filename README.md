@@ -25,8 +25,8 @@ Everything the agent responds to goes through one queue. Three things write to i
 </picture>
 
 - **The user's messages** go to `POST /user-message`, and the server queues them.
-- **Transact SDK events**: when the user leaves the Atomic screen, the app sends the SDK's `onFinish` or `onClose` payload to `POST /transact-events`. The server queues it as a system event, so the agent can check on the task and follow up.
-- **Atomic webhooks** arrive at `POST /webhooks/atomic/deposit-agent`. Each `task-status-updated` event for the `deposit` product is saved to SQLite as its own row, raw payload included, so a task's whole history is kept. When a task finishes (`completed` or `failed`), the server also queues it, with the failure reason or how much of the paycheck moved.
+- **Transact SDK events**: when the user finishes in the Atomic screen, the app sends the SDK's `onFinish` payload to `POST /transact-events`. The server queues it as a system event, so the agent can check on the task and follow up. Closing Transact isn't sent: if a switch started, Atomic's webhooks report on it.
+- **Atomic webhooks** arrive at `POST /webhooks/atomic/deposit-agent`. Each `task-status-updated` event for the `deposit` product is saved to SQLite as its own row, raw payload included, so a task's whole history is kept. The server also queues each one for the agent: `processing` when the task starts, then `completed` or `failed`, with the failure reason or how much of the paycheck moved.
 - **The agent** sees system events as `<system_event type="…">` messages the user never sees. Its system prompt says how to respond to each type.
 - **Replies** go to the app over the WebSocket, along with `busy` (for the typing indicator) and `error` events. Each user has one thread, keyed by their user ID.
 
@@ -56,7 +56,7 @@ The agent has five tools. Each runs on the server, so Atomic credentials never r
 | `upsert_user` | Makes sure Atomic knows the user, by creating them if needed, along with the bank account their paycheck can go to. Called at the start of each conversation. | `POST /access-token` |
 | `search_companies` | Searches for employers, payroll providers and gig platforms where a direct deposit can be switched. Can narrow to the employers on one payroll system (`connectorId`) or the franchisees under one brand (`franchiseParent`). | `POST /company/search` |
 | `get_company_details` | Says whether a switch is available right now, whether part of the paycheck can move or only all of it, and which payroll systems the company runs on, including whether its sign-in is per employer. | `GET /company/:companyId/details` |
-| `get_deposit_config` | Creates a public token and gives the app an "Update deposit at \<company\>" button. It opens Transact on a `deposit` task, deeplinked to the company's sign-in, and to a specific payroll system when the user chose one or named it (such as Workday). | `GET /company/:companyId/details`, `POST /access-token` |
+| `get_deposit_config` | Creates a public token and gives the app an "Update Deposit" button, with the company's logo. It opens Transact on a `deposit` task, deeplinked to the company's sign-in, and to a specific payroll system when the user chose one or named it (such as Workday). | `GET /company/:companyId/details`, `POST /access-token` |
 | `check_events` | Reads the latest event for each task from the stored webhooks, to tell the user whether a switch went through. | None. It reads the local database. |
 
 The bank account the paycheck goes to comes from `getUserAccounts` in [server/db.js](server/db.js), which both tools call before creating an access token. It returns Atomic's example account, which works in the sandbox; in a real app it's the user's own account at your bank, and the model never sees it.
