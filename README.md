@@ -49,16 +49,19 @@ mobile/         Expo app: chat screen, API client, Transact launcher
 
 ## Tools
 
-The agent has four tools. Each runs on the server, so Atomic credentials never reach the model or the app.
+The agent has five tools. Each runs on the server, so Atomic credentials never reach the model or the app.
 
 | Tool | What it does | Atomic API |
 | --- | --- | --- |
+| `find_payroll_accounts` | Looks the user up by identity in the payroll systems Atomic has CoAuth partnerships with (ADP today). A user found there can switch by confirming a code from their payroll system instead of signing in. Called once the user asks to move their deposit. The identity comes from `getUserIdentity` in [server/db.js](server/db.js) and never reaches the model. | `POST /pre-screen` |
 | `search_companies` | Searches for employers, payroll providers and gig platforms where a direct deposit can be switched. Can narrow to the employers on one payroll system (`connectorId`) or the franchisees under one brand (`franchiseParent`). | `POST /company/search` |
 | `get_company_details` | Says whether a switch is available right now, whether part of the paycheck can move or only all of it, and which payroll systems the company runs on, including whether its sign-in is per employer. | `GET /company/:companyId/details` |
 | `get_deposit_config` | Checks that the company, and the payroll system when one was chosen, support deposit, then creates a public token and gives the app an "Update Deposit" button, with the company's logo. Creating the token also registers the user with Atomic. It opens Transact on a `deposit` task, deeplinked to the company's sign-in, and to a specific payroll system when the user chose one or named it (such as Workday). | `GET /company/:companyId/details`, `POST /access-token` |
 | `check_events` | Reads each task's current status from the stored webhooks, to tell the user whether a switch went through. The agent matches the task to the switch by the `taskId` from Transact. | None. It reads the local database. |
 
 The bank account the paycheck goes to comes from `getUserAccounts` in [server/db.js](server/db.js), which `get_deposit_config` calls before creating an access token. It returns Atomic's example account, which works in the sandbox; in a real app it's the user's own account at your bank, and the model never sees it.
+
+The user's identity for CoAuth comes from `getUserIdentity` in the same file. It returns Atomic's sandbox test user who is found at ADP; in a real app it's the identity details your bank already holds. `find_payroll_accounts` sends it to `POST /pre-screen`, and `get_deposit_config` adds it to the access token, so Transact uses CoAuth for that payroll system and verifies the user with a code instead of a password. Return `null` for a user without identity data and the agent skips CoAuth. See the [CoAuth guide](https://docs.atomicfi.com/integrations/co-auth).
 
 ### The Transact config
 

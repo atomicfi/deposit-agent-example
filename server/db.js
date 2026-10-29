@@ -44,6 +44,24 @@ export function getUserAccounts(userId) {
   ]
 }
 
+// The user's identity, for CoAuth: Atomic uses it to find the user in a partner
+// payroll system (ADP today), who then verifies with a code instead of a
+// password. A real app reads this from its own customer records; it goes to
+// Atomic from the server and never to the model. This returns Atomic's sandbox
+// test user who is found at ADP. Return null for a user without identity data,
+// and CoAuth is skipped.
+// https://docs.atomicfi.com/guides/co-auth/implementation
+export function getUserIdentity(userId) {
+  return {
+    firstName: 'Jonah',
+    lastName: 'Gross',
+    ssn: '203821645',
+    dateOfBirth: '1998-02-11',
+    phone: '5558675309',
+    email: 'test@example.com'
+  }
+}
+
 // Every task-status-updated webhook for the deposit product, one row per event,
 // so a task's whole history is kept. payload is the webhook exactly as Atomic
 // sent it. distribution_type is how much of the paycheck moves: 'total',

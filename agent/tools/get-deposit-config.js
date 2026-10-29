@@ -1,5 +1,5 @@
 import { atomic } from '../../atomic/index.js'
-import { getUserAccounts } from '../../server/db.js'
+import { getUserAccounts, getUserIdentity } from '../../server/db.js'
 
 export const getDepositConfig = {
   name: 'get_deposit_config',
@@ -21,6 +21,9 @@ Prepare Atomic's Transact SDK to switch the user's direct deposit at one company
   user can move part of their paycheck unless distributionTypes includes one of those. It's
   missing when the Atomic screen will ask which payroll system they use.
 - Never ask for the user's password. Atomic collects sign-in details itself.
+- For an account find_payroll_accounts found ('VERIFIED_PAYROLL'), pass its companyId and
+  connectorId. The Atomic screen then verifies the user with a code from their payroll system
+  instead of a password.
 - If it returns an error instead of state 'ready', there's no button: the error says why. Don't tell
   the user to tap anything.
 - After calling, tell the user to tap the button to continue. When they leave the Atomic screen, you
@@ -83,9 +86,13 @@ Prepare Atomic's Transact SDK to switch the user's direct deposit at one company
       }
     }
 
-    // The accounts the paycheck can go to, from the app's own records.
+    // The accounts the paycheck can go to, and the user's identity for CoAuth,
+    // from the app's own records. With identity, Transact uses CoAuth on a
+    // partner payroll system and links the token to find_payroll_accounts'
+    // lookup, which used the same user identifier.
     const accounts = getUserAccounts(ctx.userIdentifier)
-    const { data } = await atomic.createAccessToken(ctx.userIdentifier, { accounts })
+    const identity = getUserIdentity(ctx.userIdentifier) ?? undefined
+    const { data } = await atomic.createAccessToken(ctx.userIdentifier, { accounts, identity })
     return {
       output: {
         state: 'ready',
