@@ -1,14 +1,14 @@
 // LangChain tools for the direct deposit agent. Each tool lives in its own file
 // with its name, description, schemas and handler.
 import { tool } from "langchain";
-import { upsertUser } from "./upsert-user.js";
+import { findPayrollAccounts } from "./find-payroll-accounts.js";
 import { searchCompanies } from "./search-companies.js";
 import { getCompanyDetails } from "./get-company-details.js";
 import { getDepositConfig } from "./get-deposit-config.js";
 import { checkEvents } from "./check-events.js";
 
 export const TOOLS = [
-  upsertUser,
+  findPayrollAccounts,
   searchCompanies,
   getCompanyDetails,
   getDepositConfig,

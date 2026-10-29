@@ -44,6 +44,24 @@ export function getUserAccounts(userId) {
   ]
 }
 
+// The user's identity, for CoAuth: Atomic uses it to find the user in a partner
+// payroll system (ADP today), who then verifies with a code instead of a
+// password. A real app reads this from its own customer records; it goes to
+// Atomic from the server and never to the model. This returns Atomic's sandbox
+// test user who is found at ADP. Return null for a user without identity data,
+// and CoAuth is skipped.
+// https://docs.atomicfi.com/guides/co-auth/implementation
+export function getUserIdentity(userId) {
+  return {
+    firstName: 'Jonah',
+    lastName: 'Gross',
+    ssn: '203821645',
+    dateOfBirth: '1998-02-11',
+    phone: '5558675309',
+    email: 'test@example.com'
+  }
+}
+
 // Every task-status-updated webhook for the deposit product, one row per event,
 // so a task's whole history is kept. payload is the webhook exactly as Atomic
 // sent it. distribution_type is how much of the paycheck moves: 'total',
@@ -99,6 +117,17 @@ export function saveTaskStatusUpdatedEvent({
   )
 }
 
+// A task's status as the agent should see it: a final status ('completed' or 'failed') wins over
+// 'processing', since Atomic can deliver a task's events out of order. null when none has arrived.
+export function getTaskStatus(taskId) {
+  return db.prepare(`
+    SELECT status FROM task_status_update_events
+    WHERE task_id = ?
+    ORDER BY status IN ('completed', 'failed') DESC, id DESC
+    LIMIT 1
+  `).get(taskId)?.status ?? null
+}
+
 // Whether any webhook has arrived for the task.
 export function hasTaskStatusUpdatedEvents(taskId) {
   return Boolean(
@@ -106,11 +135,14 @@ export function hasTaskStatusUpdatedEvents(taskId) {
   )
 }
 
-// The latest event for each of the user's tasks, newest first.
+// The latest event for each of the user's tasks, newest first. A final status wins over a
+// 'processing' that arrived after it.
 export function getTaskStatusUpdatedEvents(userIdentifier, limit = 10) {
   return db.prepare(`
     WITH ranked AS (
-      SELECT *, ROW_NUMBER() OVER (PARTITION BY task_id ORDER BY id DESC) AS rank
+      SELECT *, ROW_NUMBER() OVER (
+        PARTITION BY task_id ORDER BY status IN ('completed', 'failed') DESC, id DESC
+      ) AS rank
       FROM task_status_update_events
       WHERE user_identifier = ?
     )

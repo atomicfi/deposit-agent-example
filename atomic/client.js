@@ -70,12 +70,25 @@ export function createAtomicClient({
     },
 
     // POST /access-token. Also registers the user with Atomic. accounts are the
-    // bank accounts a direct deposit can be switched to.
+    // bank accounts a direct deposit can be switched to. identity lets Transact
+    // use CoAuth, and links the token to the user's pre-screen results.
     // https://docs.atomicfi.com/reference/api#access-token__create-access-token
-    createAccessToken(identifier, { accounts } = {}) {
+    createAccessToken(identifier, { accounts, identity } = {}) {
       return request("POST", "/access-token", {
-        body: { identifier, ...(accounts && { accounts }) },
+        body: {
+          identifier,
+          ...(accounts && { accounts }),
+          ...(identity && { identity }),
+        },
       });
+    },
+
+    // POST /pre-screen. Looks the user up by identity in the payroll systems
+    // Atomic has CoAuth partnerships with. The partners require that the user
+    // has asked to set up direct deposit first.
+    // https://docs.atomicfi.com/reference/api#co-auth
+    preScreen(identifier, identity) {
+      return request("POST", "/pre-screen", { body: { identifier, identity } });
     },
 
     // The endpoints below only set up Atomic's webhooks automatically when you run

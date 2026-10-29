@@ -26,7 +26,7 @@ Everything the agent responds to goes through one queue. Three things write to i
 
 - **The user's messages** go to `POST /user-message`, and the server queues them.
 - **Transact SDK events**: when the user leaves the Atomic screen, the app sends the SDK's `onFinish` or `onClose` payload to `POST /transact-events`, with the `taskId` when Transact created a task. The server queues it as a system event, so the agent can follow up: after a close, it tells the user a switch they started is under way. If a webhook for that task has already arrived, the agent has already told the user, so the server skips the close.
-- **Atomic webhooks** arrive at `POST /webhooks/atomic/deposit-agent`. Each `task-status-updated` event for the `deposit` product is saved to SQLite as its own row, raw payload included, so a task's whole history is kept. The server also queues each one for the agent: `processing` when the task starts, then `completed` or `failed`, with the failure reason or how much of the paycheck moved.
+- **Atomic webhooks** arrive at `POST /webhooks/atomic/deposit-agent`. Each `task-status-updated` event for the `deposit` product is saved to SQLite as its own row, raw payload included, so a task's whole history is kept. The server also queues it for the agent, with its `taskId`: `processing` when the task starts, then `completed` or `failed`, with the failure reason or how much of the paycheck moved. Atomic can deliver an event more than once, and a task's events out of order, so the server skips a repeat, and a `processing` that arrives after the task finished.
 - **The agent** sees system events as `<system_event type="…">` messages the user never sees. Its system prompt says how to respond to each type.
 - **Replies** go to the app over the WebSocket, along with `busy` (for the typing indicator) and `error` events. Each user has one thread, keyed by their user ID.
 
@@ -53,13 +53,15 @@ The agent has five tools. Each runs on the server, so Atomic credentials never r
 
 | Tool | What it does | Atomic API |
 | --- | --- | --- |
-| `upsert_user` | Makes sure Atomic knows the user, by creating them if needed, along with the bank account their paycheck can go to. Called at the start of each conversation. | `POST /access-token` |
+| `find_payroll_accounts` | Looks the user up by identity in the payroll systems Atomic has CoAuth partnerships with (ADP today). A user found there can switch by confirming a code from their payroll system instead of signing in. Called once the user asks to move their deposit. The identity comes from `getUserIdentity` in [server/db.js](server/db.js) and never reaches the model. | `POST /pre-screen` |
 | `search_companies` | Searches for employers, payroll providers and gig platforms where a direct deposit can be switched. Can narrow to the employers on one payroll system (`connectorId`) or the franchisees under one brand (`franchiseParent`). | `POST /company/search` |
 | `get_company_details` | Says whether a switch is available right now, whether part of the paycheck can move or only all of it, and which payroll systems the company runs on, including whether its sign-in is per employer. | `GET /company/:companyId/details` |
-| `get_deposit_config` | Creates a public token and gives the app an "Update Deposit" button, with the company's logo. It opens Transact on a `deposit` task, deeplinked to the company's sign-in, and to a specific payroll system when the user chose one or named it (such as Workday). | `GET /company/:companyId/details`, `POST /access-token` |
-| `check_events` | Reads the latest event for each task from the stored webhooks, to tell the user whether a switch went through. | None. It reads the local database. |
+| `get_deposit_config` | Checks that the company, and the payroll system when one was chosen, support deposit, then creates a public token and gives the app an "Update Deposit" button, with the company's logo. Creating the token also registers the user with Atomic. It opens Transact on a `deposit` task, with the amount the user confirmed in the chat if any, deeplinked to the company's sign-in, and to a specific payroll system when the user chose one or named it (such as Workday). | `GET /company/:companyId/details`, `POST /access-token` |
+| `check_events` | Reads each task's current status from the stored webhooks, to tell the user whether a switch went through. The agent matches the task to the switch by the `taskId` from Transact. | None. It reads the local database. |
 
-The bank account the paycheck goes to comes from `getUserAccounts` in [server/db.js](server/db.js), which both tools call before creating an access token. It returns Atomic's example account, which works in the sandbox; in a real app it's the user's own account at your bank, and the model never sees it.
+The bank account the paycheck goes to comes from `getUserAccounts` in [server/db.js](server/db.js), which `get_deposit_config` calls before creating an access token. It returns Atomic's example account, which works in the sandbox; in a real app it's the user's own account at your bank, and the model never sees it.
+
+The user's identity for CoAuth comes from `getUserIdentity` in the same file. It returns Atomic's sandbox test user who is found at ADP; in a real app it's the identity details your bank already holds. `find_payroll_accounts` sends it to `POST /pre-screen`, and `get_deposit_config` adds it to the access token, so Transact uses CoAuth for that payroll system and verifies the user with a code instead of a password. Return `null` for a user without identity data and the agent skips CoAuth. See the [CoAuth guide](https://docs.atomicfi.com/integrations/co-auth).
 
 ### The Transact config
 
@@ -69,12 +71,12 @@ The bank account the paycheck goes to comes from `getUserAccounts` in [server/db
 {
   scope: 'user-link',
   publicToken,
-  tasks: [{ operation: 'deposit' }],
+  tasks: [{ operation: 'deposit', distribution }], // distribution only when the user confirmed an amount
   deeplink: { step: 'login-company', companyId, connectorId } // connectorId only when the user chose or named a payroll system
 }
 ```
 
-No `distribution` is set, so the user chooses how much of their paycheck to move in Transact, when their payroll system allows a choice. To fix the amount, add `distribution: { type, amount }` to the task; see the [Transact SDK reference](https://docs.atomicfi.com/reference/transact-sdk).
+When the user has confirmed an amount with the agent, the task carries it: `distribution: { type, amount, canUpdate }`. The agent only offers splits that both the payroll system (its `distributionTypes`) and your bank allow, and the server checks them again before making the button. Your bank's side comes from [server/deposit-settings.js](server/deposit-settings.js): set `FRACTIONAL_DEPOSITS` and `DEPOSIT_AMOUNT_CAN_UPDATE` in `.env` to match the Fractional Deposits settings on your Atomic account, since the API doesn't return them. `canUpdate` is off by default, so the user can't change in Transact the amount they agreed to in the chat. Without a confirmed amount, no `distribution` is set, and the user chooses in Transact when their payroll system allows a choice. See the [Transact SDK reference](https://docs.atomicfi.com/reference/transact-sdk).
 
 ## Running it locally
 
