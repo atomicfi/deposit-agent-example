@@ -1,5 +1,6 @@
 import { atomic } from '../../atomic/index.js'
 import { getUserAccounts, getUserIdentity } from '../../server/db.js'
+import { allowedDistributionTypes, getDepositSettings } from '../../server/deposit-settings.js'
 
 export const getDepositConfig = {
   name: 'get_deposit_config',
@@ -16,10 +17,19 @@ Prepare Atomic's Transact SDK to switch the user's direct deposit at one company
 - Nothing changes until the user taps the button, signs in to their payroll account in the Atomic
   screen, and confirms. The paycheck goes to their account at this bank; you never need their
   account or routing number.
-- The result's distributionTypes are what the payroll system the button opens on allows: 'total'
-  alone means the whole paycheck moves; 'fixed' or 'percent' means it can send part. Don't say the
-  user can move part of their paycheck unless distributionTypes includes one of those. It's
-  missing when the Atomic screen will ask which payroll system they use.
+- distribution: how much of the paycheck moves, once the user has confirmed it with you: type
+  'total' (the whole paycheck), 'fixed' with amount in dollars, or 'percent' with amount from 1 to
+  100. Only a type in the payroll system's distributionTypes from get_company_details. Leave it out
+  when the user hasn't settled on an amount or you don't know which payroll system they'll sign in
+  to; they then choose in the Atomic screen if the payroll system allows a choice.
+- The result echoes the distribution set on the button, and amountCanChange says whether the user
+  can still change it in the Atomic screen. Its distributionTypes are what the payroll system the
+  button opens on allows; missing when the Atomic screen will ask which payroll system they use.
+  Without a distribution, don't say the user can move part of their paycheck unless
+  distributionTypes includes 'fixed' or 'percent'.
+- Errors about the amount: 'distribution-not-allowed' (that kind of split isn't allowed; the result
+  lists distributionTypes), 'amount-invalid', and 'payroll-system-unknown' (find out which payroll
+  system they use first, or leave distribution out).
 - Never ask for the user's password. Atomic collects sign-in details itself.
 - For an account find_payroll_accounts found ('VERIFIED_PAYROLL'), pass its companyId and
   connectorId. The Atomic screen then verifies the user with a code from their payroll system
@@ -43,6 +53,19 @@ Prepare Atomic's Transact SDK to switch the user's direct deposit at one company
         type: 'string',
         description:
           "Optional. The _id of the payroll system the user chose from the company's alternativeConnectors, or of the payroll system you found their employer through."
+      },
+      distribution: {
+        type: 'object',
+        description: 'Optional. The amount the user confirmed with you.',
+        properties: {
+          type: { enum: ['total', 'fixed', 'percent'] },
+          amount: {
+            type: 'number',
+            description: "Dollars for 'fixed', a percentage from 1 to 100 for 'percent'. Leave it out for 'total'."
+          }
+        },
+        required: ['type'],
+        additionalProperties: false
       }
     },
     required: ['companyId'],
@@ -55,7 +78,7 @@ Prepare Atomic's Transact SDK to switch the user's direct deposit at one company
   returnsClientAction: true,
 
   // ctx ({ userIdentifier, conversationId }) comes from the server, never the model.
-  async handler({ companyId, connectorId }, ctx, { newId, sdkEnvironment }) {
+  async handler({ companyId, connectorId, distribution }, ctx, { newId, sdkEnvironment }) {
     // The name and logo for the button come from Atomic rather than the model,
     // which could misspell one or invent a logo URL.
     const { data: company } = await atomic.getCompanyDetails(companyId)
@@ -86,6 +109,23 @@ Prepare Atomic's Transact SDK to switch the user's direct deposit at one company
       }
     }
 
+    // The amount has to be one the bank and the payroll system allow. Transact
+    // would otherwise fail the switch, after the user has signed in.
+    const allowed = chosen ? allowedDistributionTypes(chosen) : null
+    if (distribution) {
+      const { type, amount } = distribution
+      const problem =
+        type === 'total' ? null
+        : !allowed ? 'payroll-system-unknown'
+        : !allowed.includes(type) ? 'distribution-not-allowed'
+        : type !== 'total' && !(amount > 0 && (type !== 'percent' || amount <= 100)) ? 'amount-invalid'
+        : null
+      if (problem) {
+        return { output: { error: problem, company: company.name, ...(allowed && { distributionTypes: allowed }) } }
+      }
+    }
+    const { canUpdateAmount } = getDepositSettings()
+
     // The accounts the paycheck can go to, and the user's identity for CoAuth,
     // from the app's own records. With identity, Transact uses CoAuth on a
     // partner payroll system and links the token to find_payroll_accounts'
@@ -97,7 +137,8 @@ Prepare Atomic's Transact SDK to switch the user's direct deposit at one company
       output: {
         state: 'ready',
         company: company.name,
-        ...(chosen?.capabilities?.distributionTypes && { distributionTypes: chosen.capabilities.distributionTypes })
+        ...(allowed && { distributionTypes: allowed }),
+        ...(distribution && { distribution, amountCanChange: canUpdateAmount })
       },
       clientAction: {
         type: 'launch_transact',
@@ -108,7 +149,19 @@ Prepare Atomic's Transact SDK to switch the user's direct deposit at one company
         config: {
           scope: 'user-link',
           publicToken: data.publicToken,
-          tasks: [{ operation: 'deposit' }],
+          tasks: [
+            {
+              operation: 'deposit',
+              // Without canUpdate, the user can't change it in Transact.
+              ...(distribution && {
+                distribution: {
+                  type: distribution.type,
+                  ...(distribution.type !== 'total' && { amount: distribution.amount }),
+                  canUpdate: canUpdateAmount
+                }
+              })
+            }
+          ],
           // Opens Transact on the company's sign-in, skipping its own search.
           // https://docs.atomicfi.com/guides/deeplink-to-login
           deeplink: {

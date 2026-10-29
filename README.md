@@ -56,7 +56,7 @@ The agent has five tools. Each runs on the server, so Atomic credentials never r
 | `find_payroll_accounts` | Looks the user up by identity in the payroll systems Atomic has CoAuth partnerships with (ADP today). A user found there can switch by confirming a code from their payroll system instead of signing in. Called once the user asks to move their deposit. The identity comes from `getUserIdentity` in [server/db.js](server/db.js) and never reaches the model. | `POST /pre-screen` |
 | `search_companies` | Searches for employers, payroll providers and gig platforms where a direct deposit can be switched. Can narrow to the employers on one payroll system (`connectorId`) or the franchisees under one brand (`franchiseParent`). | `POST /company/search` |
 | `get_company_details` | Says whether a switch is available right now, whether part of the paycheck can move or only all of it, and which payroll systems the company runs on, including whether its sign-in is per employer. | `GET /company/:companyId/details` |
-| `get_deposit_config` | Checks that the company, and the payroll system when one was chosen, support deposit, then creates a public token and gives the app an "Update Deposit" button, with the company's logo. Creating the token also registers the user with Atomic. It opens Transact on a `deposit` task, deeplinked to the company's sign-in, and to a specific payroll system when the user chose one or named it (such as Workday). | `GET /company/:companyId/details`, `POST /access-token` |
+| `get_deposit_config` | Checks that the company, and the payroll system when one was chosen, support deposit, then creates a public token and gives the app an "Update Deposit" button, with the company's logo. Creating the token also registers the user with Atomic. It opens Transact on a `deposit` task, with the amount the user confirmed in the chat if any, deeplinked to the company's sign-in, and to a specific payroll system when the user chose one or named it (such as Workday). | `GET /company/:companyId/details`, `POST /access-token` |
 | `check_events` | Reads each task's current status from the stored webhooks, to tell the user whether a switch went through. The agent matches the task to the switch by the `taskId` from Transact. | None. It reads the local database. |
 
 The bank account the paycheck goes to comes from `getUserAccounts` in [server/db.js](server/db.js), which `get_deposit_config` calls before creating an access token. It returns Atomic's example account, which works in the sandbox; in a real app it's the user's own account at your bank, and the model never sees it.
@@ -71,12 +71,12 @@ The user's identity for CoAuth comes from `getUserIdentity` in the same file. It
 {
   scope: 'user-link',
   publicToken,
-  tasks: [{ operation: 'deposit' }],
+  tasks: [{ operation: 'deposit', distribution }], // distribution only when the user confirmed an amount
   deeplink: { step: 'login-company', companyId, connectorId } // connectorId only when the user chose or named a payroll system
 }
 ```
 
-No `distribution` is set, so the user chooses how much of their paycheck to move in Transact, when their payroll system allows a choice. To fix the amount, add `distribution: { type, amount }` to the task; see the [Transact SDK reference](https://docs.atomicfi.com/reference/transact-sdk).
+When the user has confirmed an amount with the agent, the task carries it: `distribution: { type, amount, canUpdate }`. The agent only offers splits that both the payroll system (its `distributionTypes`) and your bank allow, and the server checks them again before making the button. Your bank's side comes from [server/deposit-settings.js](server/deposit-settings.js): set `FRACTIONAL_DEPOSITS` and `DEPOSIT_AMOUNT_CAN_UPDATE` in `.env` to match the Fractional Deposits settings on your Atomic account, since the API doesn't return them. `canUpdate` is off by default, so the user can't change in Transact the amount they agreed to in the chat. Without a confirmed amount, no `distribution` is set, and the user chooses in Transact when their payroll system allows a choice. See the [Transact SDK reference](https://docs.atomicfi.com/reference/transact-sdk).
 
 ## Running it locally
 
