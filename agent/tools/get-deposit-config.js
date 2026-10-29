@@ -14,10 +14,15 @@ Prepare Atomic's Transact SDK to switch the user's direct deposit at one company
   that requiresEmployerName (pass that system's connector._id); otherwise leave it out and the
   company's own payroll system is used.
 - Nothing changes until the user taps the button, signs in to their payroll account in the Atomic
-  screen, and confirms. They choose how much of their paycheck to move there, when their payroll
-  system allows a choice. The paycheck goes to their account at this bank; you never need their
+  screen, and confirms. The paycheck goes to their account at this bank; you never need their
   account or routing number.
+- The result's distributionTypes are what the payroll system the button opens on allows: 'total'
+  alone means the whole paycheck moves; 'fixed' or 'percent' means it can send part. Don't say the
+  user can move part of their paycheck unless distributionTypes includes one of those. It's
+  missing when the Atomic screen will ask which payroll system they use.
 - Never ask for the user's password. Atomic collects sign-in details itself.
+- If it returns an error instead of state 'ready', there's no button: the error says why. Don't tell
+  the user to tap anything.
 - After calling, tell the user to tap the button to continue. When they leave the Atomic screen, you
   get a transact-finished or transact-closed event, and Atomic's webhooks tell you when the switch
   starts and finishes.
@@ -52,22 +57,41 @@ Prepare Atomic's Transact SDK to switch the user's direct deposit at one company
     // which could misspell one or invent a logo URL.
     const { data: company } = await atomic.getCompanyDetails(companyId)
 
-    // The model can name a connector the company doesn't have. Deeplinking to
-    // it would fail in Transact, so drop it: the user then sees the company's
-    // default payroll system, or picks one in Transact.
-    const connectorIds = [company.connector, ...(company.alternativeConnectors ?? [])]
-      .filter(Boolean)
-      .map((c) => String(c._id))
-    if (connectorId && !connectorIds.includes(connectorId)) {
-      console.warn(`[tool] get_deposit_config dropped connector ${connectorId} not on company ${companyId}`)
-      connectorId = undefined
+    // Transact would show an error for a company or payroll system without
+    // deposit, or for a connector the company doesn't have. Tell the model,
+    // so it doesn't promise a button that opens on the wrong payroll system.
+    if (!company.availableProducts?.includes('deposit')) {
+      return { output: { error: 'deposit-not-supported', company: company.name } }
+    }
+    const connectors = [company.connector, ...(company.alternativeConnectors ?? [])].filter(Boolean)
+    // The payroll system the button opens on: the one the model chose, or the company's own when it
+    // has no others. Unknown when Transact will ask the user to pick.
+    let chosen = company.alternativeConnectors?.length ? null : company.connector
+    if (connectorId) {
+      chosen = connectors.find((c) => String(c._id) === connectorId)
+      if (!chosen) {
+        return {
+          output: {
+            error: 'connector-not-on-company',
+            company: company.name,
+            connectors: connectors.map((c) => ({ _id: c._id, name: c.name }))
+          }
+        }
+      }
+      if (!chosen.availableProducts?.includes('deposit')) {
+        return { output: { error: 'deposit-not-supported', company: company.name, connector: chosen.name } }
+      }
     }
 
     // The accounts the paycheck can go to, from the app's own records.
     const accounts = getUserAccounts(ctx.userIdentifier)
     const { data } = await atomic.createAccessToken(ctx.userIdentifier, { accounts })
     return {
-      output: { state: 'ready', company: company.name },
+      output: {
+        state: 'ready',
+        company: company.name,
+        ...(chosen?.capabilities?.distributionTypes && { distributionTypes: chosen.capabilities.distributionTypes })
+      },
       clientAction: {
         type: 'launch_transact',
         id: newId(),

@@ -17,16 +17,17 @@ Look up one company by its _id from search_companies. Call it when a search resu
 follow-up about a company you found. Don't call it on every turn.
 - supportsDepositSwitch: whether a direct deposit can be switched there.
 - status and underMaintenanceProductsAndActions: 'under-maintenance' with 'deposit' in the list, or
-  with the list missing, means a switch may not go through right now.
+  with the list null, means a switch can't start right now.
 - distributionTypes: how much of the paycheck can move. 'total' alone means the whole paycheck has
-  to move together; 'fixed' (a dollar amount) and 'percent' mean part of it can go to the new
-  account while the rest stays where it is.
+  to move together; 'fixed' (a dollar amount) and 'percent' mean the payroll system can send part of
+  it to the new account.
 - isFranchiseParent: a brand, not an employer. The franchisee running the user's location pays them.
 - requiresEmployerName: a payroll system whose sign-in differs for each employer, such as Workday.
-  Naming the system isn't enough to sign anyone in, so the employer still has to be found.
+  Find the employer by searching with this system's connector._id as connectorId. If the user can't
+  say, the button still works: the Atomic screen asks them for their employer.
 - connector: the payroll system the company uses by default.
 - alternativeConnectors: other payroll systems behind this company. When present, only the user
-  knows which one pays them.`,
+  knows which one pays them. If they don't know, the Atomic screen asks them.`,
 
   schema: {
     type: 'object',

@@ -99,6 +99,17 @@ export function saveTaskStatusUpdatedEvent({
   )
 }
 
+// A task's status as the agent should see it: a final status ('completed' or 'failed') wins over
+// 'processing', since Atomic can deliver a task's events out of order. null when none has arrived.
+export function getTaskStatus(taskId) {
+  return db.prepare(`
+    SELECT status FROM task_status_update_events
+    WHERE task_id = ?
+    ORDER BY status IN ('completed', 'failed') DESC, id DESC
+    LIMIT 1
+  `).get(taskId)?.status ?? null
+}
+
 // Whether any webhook has arrived for the task.
 export function hasTaskStatusUpdatedEvents(taskId) {
   return Boolean(
@@ -106,11 +117,14 @@ export function hasTaskStatusUpdatedEvents(taskId) {
   )
 }
 
-// The latest event for each of the user's tasks, newest first.
+// The latest event for each of the user's tasks, newest first. A final status wins over a
+// 'processing' that arrived after it.
 export function getTaskStatusUpdatedEvents(userIdentifier, limit = 10) {
   return db.prepare(`
     WITH ranked AS (
-      SELECT *, ROW_NUMBER() OVER (PARTITION BY task_id ORDER BY id DESC) AS rank
+      SELECT *, ROW_NUMBER() OVER (
+        PARTITION BY task_id ORDER BY status IN ('completed', 'failed') DESC, id DESC
+      ) AS rank
       FROM task_status_update_events
       WHERE user_identifier = ?
     )

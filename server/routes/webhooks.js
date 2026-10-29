@@ -1,7 +1,7 @@
 // Atomic webhooks. task-status-updated (for the deposit product) is stored and queued for the
 // agent; other events are acknowledged so Atomic doesn't retry them.
 import { Router } from "express";
-import { saveTaskStatusUpdatedEvent } from "../db.js";
+import { getTaskStatus, saveTaskStatusUpdatedEvent } from "../db.js";
 import { enqueueSystemEvent } from "../queue.js";
 
 // Where Atomic sends this app's webhooks. index.js mounts this router at /webhooks.
@@ -31,6 +31,9 @@ function handleTaskStatusUpdated(event) {
   // How much of the paycheck moves. distributionAmount is absent for 'total'.
   const distributionType = event.data?.distributionType ?? null;
   const distributionAmount = event.data?.distributionAmount ?? null;
+  // Atomic can deliver an event more than once, and a task's events out of order. Read what the
+  // agent already knows before storing this one.
+  const known = getTaskStatus(taskId);
   // Every event is stored, along with the raw webhook.
   saveTaskStatusUpdatedEvent({
     taskId,
@@ -47,9 +50,14 @@ function handleTaskStatusUpdated(event) {
     `[webhook] task=${taskId} user=${userIdentifier} company=${companyName} status=${status} reason=${reason} distribution=${distributionType}:${distributionAmount}`,
   );
 
+  // A repeat, or a 'processing' that arrives after the task finished, tells the user nothing new.
+  const isFinal = (s) => s === "completed" || s === "failed";
+  if (known === status || (isFinal(known) && !isFinal(status))) return;
+
   // Only these fields go to the agent: the raw webhook also carries the
   // user's public token, which the model shouldn't see.
   enqueueSystemEvent(userIdentifier, "task-status-updated", {
+    taskId,
     companyId,
     companyName,
     status,
