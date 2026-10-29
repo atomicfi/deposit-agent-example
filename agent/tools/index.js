@@ -1,19 +1,23 @@
-// LangChain tools for the direct deposit agent. Each tool lives in its own file
-// with its name, description, schemas and handler.
+// LangChain tools for the direct deposit agent. Names, descriptions and input
+// schemas come from the published tool definitions (see definitions.js); each
+// file here supplies the handler for one tool, matched by name.
 import { tool } from "langchain";
+import { loadToolDefinitions } from "./definitions.js";
 import { findPayrollAccounts } from "./find-payroll-accounts.js";
 import { searchCompanies } from "./search-companies.js";
 import { getCompanyDetails } from "./get-company-details.js";
 import { getDepositConfig } from "./get-deposit-config.js";
 import { checkEvents } from "./check-events.js";
 
-export const TOOLS = [
+export const HANDLERS = [
   findPayrollAccounts,
   searchCompanies,
   getCompanyDetails,
   getDepositConfig,
   checkEvents,
 ];
+
+export const DEFINITIONS = await loadToolDefinitions();
 
 // Where the app's Transact SDK should point. transactPath falls back to the
 // SDK's default Transact UI when unset.
@@ -25,14 +29,30 @@ function defaultSdkEnvironment() {
   };
 }
 
+// Pairs each definition with its handler. Refuses to start when a definition
+// has no handler or a handler has no definition, since either means the
+// definitions and this code are out of step.
 export function createTools({
+  definitions = DEFINITIONS,
   newId = () => crypto.randomUUID(),
   sdkEnvironment = defaultSdkEnvironment(),
 } = {}) {
   const deps = { newId, sdkEnvironment };
+  const handlers = new Map(HANDLERS.map((h) => [h.name, h]));
+  const names = new Set(definitions.tools.map((d) => d.name));
+  const unhandled = [...names].filter((name) => !handlers.has(name));
+  const undefinedHandlers = [...handlers.keys()].filter((name) => !names.has(name));
+  if (unhandled.length || undefinedHandlers.length) {
+    throw new Error(
+      `Tool definitions ${definitions.version} from ${definitions.source} don't match the handlers.` +
+        (unhandled.length ? ` No handler for: ${unhandled.join(", ")}.` : "") +
+        (undefinedHandlers.length ? ` No definition for: ${undefinedHandlers.join(", ")}.` : ""),
+    );
+  }
 
-  return TOOLS.map((def) =>
-    tool(
+  return definitions.tools.map(({ name, description, schema }) => {
+    const def = handlers.get(name);
+    return tool(
       async (input, runtime) => {
         // ctx comes from the server (agent.invoke's context), never the model.
         const { userIdentifier, conversationId } = runtime.context ?? {};
@@ -73,11 +93,11 @@ export function createTools({
         }
       },
       {
-        name: def.name,
-        description: def.description,
-        schema: def.schema,
+        name,
+        description,
+        schema,
         responseFormat: "content_and_artifact",
       },
-    ),
-  );
+    );
+  });
 }

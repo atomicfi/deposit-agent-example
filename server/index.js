@@ -33,6 +33,7 @@ const { userMessageRouter } = await import("./routes/user-message.js");
 const { transactEventsRouter } = await import("./routes/transact-events.js");
 const { webhookRouter } = await import("./routes/webhooks.js");
 const { setupNgrokTunnel, setWebhooks, removeWebhooks } = await import("./webhook-config.js");
+const { DEFINITIONS } = await import("../agent/tools/index.js");
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -51,6 +52,7 @@ app.use("/webhooks", webhookRouter);
 // Once listening, open the ngrok tunnel and point Atomic's webhooks at it.
 const server = app.listen(port, async () => {
   console.log(`Listening on http://localhost:${port}`);
+  console.log(`Tool definitions ${DEFINITIONS.version} from ${DEFINITIONS.source}`);
   const tunnelUrl = await setupNgrokTunnel(port);
   if (tunnelUrl) await setWebhooks(tunnelUrl);
 });

@@ -36,7 +36,7 @@ When the agent wants the app to open Transact, a tool returns a `launch_transact
 
 ```
 agent/          The agent: model, system prompt, tools
-  tools/        One file per tool
+  tools/        One handler per tool; definitions.js loads the tool definitions
 atomic/         A small client for the Atomic API
 server/
   index.js      Express app and WebSocket server
@@ -50,6 +50,8 @@ mobile/         Expo app: chat screen, API client, Transact launcher
 ## Tools
 
 The agent has five tools. Each runs on the server, so Atomic credentials never reach the model or the app.
+
+The tools' names, descriptions and input schemas aren't in this repo. The server loads them at startup from the published [tool definitions](https://docs.atomicfi.com/reference/agent-tools), the `tools.json` you'd download for your own agent, and pairs each with its handler in `agent/tools/` by name. It won't start if a definition has no handler or a handler has no definition. To try changed definitions before they're published, set `TOOL_DEFINITIONS` in `.env` to a local `tools.json`.
 
 | Tool | What it does | Atomic API |
 | --- | --- | --- |
