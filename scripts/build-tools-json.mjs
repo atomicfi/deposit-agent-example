@@ -1,4 +1,4 @@
-// Builds agent/tools.json, the deposit agent tool pack that the docs link to, from the
+// Builds agent/tools.json, the deposit agent tool pack that public-docs publishes, from the
 // tool definitions in agent/tools/ and the system prompt in agent/agent/prompt.js. Reads the source
 // files as text, so it needs no dependencies, credentials or database.
 //   node scripts/build-tools-json.mjs           write agent/tools.json

@@ -1,5 +1,5 @@
-# agent/tools.json is the deposit agent tool pack the docs link to. It's built from agent/tools/ and
-# agent/agent/prompt.js by scripts/build-tools-json.mjs.
+# agent/tools.json is the deposit agent tool pack that public-docs publishes. It's built from
+# agent/tools/ and agent/agent/prompt.js by scripts/build-tools-json.mjs.
 # - On a pull request from this repo, rebuild it and commit it to the PR's branch when it changed.
 # - Everywhere else (main, and PRs from forks, which this workflow can't push to), fail if it's out of
 #   date.

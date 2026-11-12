@@ -37,7 +37,7 @@ When the agent wants the app to open Transact, a tool returns a `launch_transact
 ```
 agent/          The agent: model, system prompt, tools
   tools/        One file per tool
-  tools.json    The tool pack the docs link to, built from tools/ and agent/prompt.js
+  tools.json    The published tool pack, built from tools/ and agent/prompt.js
 atomic/         A small client for the Atomic API
 server/
   index.js      Express app and WebSocket server
@@ -68,16 +68,20 @@ The user's identity for CoAuth comes from `getUserIdentity` in the same file. It
 
 This repo is the source of the deposit agent's tool definitions and system prompt. Each tool's
 `name`, `description` and `schema` sit in its file in `agent/tools/`, next to its handler, and the
-prompt is in `agent/agent/prompt.js`. `agent/tools.json` collects them into the tool pack that the
-[docs](https://docs.atomicfi.com/reference/agent-tools) link to, for customers building their own
-agent:
-[raw.githubusercontent.com/atomicfi/deposit-agent-example/main/agent/tools.json](https://raw.githubusercontent.com/atomicfi/deposit-agent-example/main/agent/tools.json).
+prompt is in `agent/agent/prompt.js`. `agent/tools.json` collects them into the tool pack Atomic
+publishes at
+[docs.atomicfi.com/agent-tools/deposit/tools.json](https://docs.atomicfi.com/agent-tools/deposit/tools.json)
+for customers building their own agent.
 
 - Don't edit `agent/tools.json` by hand. On a pull request, a GitHub Action rebuilds it with
-  `node scripts/build-tools-json.mjs` and commits it to the PR's branch. Merging the PR publishes it.
-- From a fork, the Action can't push. Run `node scripts/build-tools-json.mjs` and commit the file
-  yourself, or the check fails.
+  `node scripts/build-tools-json.mjs` and commits it to the PR's branch. From a fork the Action
+  can't push, so run the script and commit the file yourself, or the check fails.
+- When `agent/tools.json` changes on `main`, another Action opens or updates a pull request in
+  public-docs that publishes it. Merging that pull request puts it live with the next docs deploy.
 - `version` is the date the definitions or prompt last changed.
+- The publishing Action needs the repository secret `PUBLIC_DOCS_TOKEN`: a fine-grained personal
+  access token with resource owner atomicfi, access to public-docs only, and Contents and Pull
+  requests set to read and write.
 
 ### The Transact config
 
