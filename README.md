@@ -37,7 +37,6 @@ When the agent wants the app to open Transact, a tool returns a `launch_transact
 ```
 agent/          The agent: model, system prompt, tools
   tools/        One file per tool
-  tools.json    The published tool pack, built from tools/ and agent/prompt.js
 atomic/         A small client for the Atomic API
 server/
   index.js      Express app and WebSocket server
@@ -63,25 +62,6 @@ The agent has five tools. Each runs on the server, so Atomic credentials never r
 The bank account the paycheck goes to comes from `getUserAccounts` in [server/db.js](server/db.js), which `get_deposit_config` calls before creating an access token. It returns Atomic's example account, which works in the sandbox; in a real app it's the user's own account at your bank, and the model never sees it.
 
 The user's identity for CoAuth comes from `getUserIdentity` in the same file. It returns Atomic's sandbox test user who is found at ADP; in a real app it's the identity details your bank already holds. `find_payroll_accounts` sends it to `POST /pre-screen`, and `get_deposit_config` adds it to the access token, so Transact uses CoAuth for that payroll system and verifies the user with a code instead of a password. Return `null` for a user without identity data and the agent skips CoAuth. See the [CoAuth guide](https://docs.atomicfi.com/integrations/co-auth).
-
-### The tool pack
-
-This repo is the source of the deposit agent's tool definitions and system prompt. Each tool's
-`name`, `description` and `schema` sit in its file in `agent/tools/`, next to its handler, and the
-prompt is in `agent/agent/prompt.js`. `agent/tools.json` collects them into the tool pack Atomic
-publishes at
-[docs.atomicfi.com/agent-tools/deposit/tools.json](https://docs.atomicfi.com/agent-tools/deposit/tools.json)
-for customers building their own agent.
-
-- Don't edit `agent/tools.json` by hand. On a pull request, a GitHub Action rebuilds it with
-  `node scripts/build-tools-json.mjs` and commits it to the PR's branch. From a fork the Action
-  can't push, so run the script and commit the file yourself, or the check fails.
-- When `agent/tools.json` changes on `main`, another Action opens or updates a pull request in
-  public-docs that publishes it. Merging that pull request puts it live with the next docs deploy.
-- `version` is the date the definitions or prompt last changed.
-- The publishing Action needs the repository secret `PUBLIC_DOCS_TOKEN`: a fine-grained personal
-  access token with resource owner atomicfi, access to public-docs only, and Contents and Pull
-  requests set to read and write.
 
 ### The Transact config
 

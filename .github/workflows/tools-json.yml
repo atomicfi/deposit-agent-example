@@ -1,5 +1,5 @@
-# agent/tools.json is the deposit agent tool pack that public-docs publishes. It's built from
-# agent/tools/ and agent/agent/prompt.js by scripts/build-tools-json.mjs.
+# tools.json is the deposit agent tool pack that public-docs publishes. It's built from agent/tools/
+# and agent/agent/prompt.js by scripts/build-tools-json.mjs.
 # - On a pull request from this repo, rebuild it and commit it to the PR's branch when it changed.
 # - Everywhere else (main, and PRs from forks, which this workflow can't push to), fail if it's out of
 #   date.
@@ -34,11 +34,11 @@ jobs:
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
           node scripts/build-tools-json.mjs
-          if git diff --quiet -- agent/tools.json; then exit 0; fi
+          if git diff --quiet -- tools.json; then exit 0; fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add agent/tools.json
-          git commit -m 'Rebuild agent/tools.json from the tools and the system prompt'
+          git add tools.json
+          git commit -m 'Rebuild tools.json from the tools and the system prompt'
           git push
 
       - name: Check tools.json is current
