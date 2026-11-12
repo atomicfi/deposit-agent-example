@@ -1,0 +1,45 @@
+# agent/tools.json is the deposit agent tool pack the docs link to. It's built from agent/tools/ and
+# agent/agent/prompt.js by scripts/build-tools-json.mjs.
+# - On a pull request from this repo, rebuild it and commit it to the PR's branch when it changed.
+# - Everywhere else (main, and PRs from forks, which this workflow can't push to), fail if it's out of
+#   date.
+name: Build tools.json
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tools-json-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The PR's branch rather than the merge commit, so the rebuilt file can be pushed to it.
+          ref: ${{ github.head_ref || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Commit the rebuilt tools.json to the PR branch
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          node scripts/build-tools-json.mjs
+          if git diff --quiet -- agent/tools.json; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add agent/tools.json
+          git commit -m 'Rebuild agent/tools.json from the tools and the system prompt'
+          git push
+
+      - name: Check tools.json is current
+        run: node scripts/build-tools-json.mjs --check
