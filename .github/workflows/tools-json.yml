@@ -1,14 +1,14 @@
-# tools.json is the deposit agent tool pack that public-docs publishes. It's built from agent/tools/
-# and agent/agent/prompt.js by scripts/build-tools-json.mjs.
-# - On a pull request from this repo, rebuild it and commit it to the PR's branch when it changed.
-# - Everywhere else (main, and PRs from forks, which this workflow can't push to), fail if it's out of
-#   date.
+# tools.json is the deposit agent tool pack that public-docs publishes (public-docs pulls it in with
+# npm run update:deposit-tools). It's built from agent/tools/ and agent/agent/prompt.js by
+# scripts/build-tools-json.mjs.
+# - On a push to a branch other than main, rebuild it and commit it to that branch when it changed.
+# - On main (which only takes reviewed pull requests) and on pull requests from forks (which this
+#   workflow can't push to), fail if it's out of date.
 name: Build tools.json
 
 on:
-  pull_request:
   push:
-    branches: [main]
+  pull_request:
 
 permissions:
   contents: write
@@ -19,19 +19,18 @@ concurrency:
 
 jobs:
   build:
+    # A pull request from this repo is already covered by the push to its branch.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          # The PR's branch rather than the merge commit, so the rebuilt file can be pushed to it.
-          ref: ${{ github.head_ref || github.ref }}
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Commit the rebuilt tools.json to the PR branch
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+      - name: Commit the rebuilt tools.json to the branch
+        if: github.event_name == 'push' && github.ref != 'refs/heads/main'
         run: |
           node scripts/build-tools-json.mjs
           if git diff --quiet -- tools.json; then exit 0; fi
