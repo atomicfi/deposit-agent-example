@@ -17,16 +17,15 @@ Prepare Atomic's Transact SDK to switch the user's direct deposit at one company
 - Nothing changes until the user taps the button, signs in to their payroll account in the Atomic
   screen, and confirms. The paycheck goes to their account at this bank; you never need their
   account or routing number.
-- distribution: how much of the paycheck moves, once the user has confirmed it with you: type
-  'total' (the whole paycheck), 'fixed' with amount in dollars, or 'percent' with amount from 1 to
-  100. Only a type in the payroll system's distributionTypes from get_company_details. Leave it out
-  when the user hasn't settled on an amount or you don't know which payroll system they'll sign in
-  to; they then choose in the Atomic screen if the payroll system allows a choice.
+- distribution: only when the user has said how much they want to move: type 'total' (the whole
+  paycheck), 'fixed' with amount in dollars, or 'percent' with amount from 1 to 100. Only a type in
+  the payroll system's distributionTypes from get_company_details. Otherwise leave it out, and the
+  user chooses in the Atomic screen. Never ask the user how much to move, and don't read their
+  amount back or ask them to confirm it.
 - The result echoes the distribution set on the button, and amountCanChange says whether the user
   can still change it in the Atomic screen. Its distributionTypes are what the payroll system the
-  button opens on allows; missing when the Atomic screen will ask which payroll system they use.
-  Without a distribution, don't say the user can move part of their paycheck unless
-  distributionTypes includes 'fixed' or 'percent'.
+  button opens on allows; missing when no payroll system was chosen.
+  Without a distribution, don't bring up amounts or moving part of the paycheck.
 - Errors about the amount: 'distribution-not-allowed' (that kind of split isn't allowed; the result
   lists distributionTypes), 'amount-invalid', and 'payroll-system-unknown' (find out which payroll
   system they use first, or leave distribution out).
@@ -36,9 +35,9 @@ Prepare Atomic's Transact SDK to switch the user's direct deposit at one company
   instead of a password.
 - If it returns an error instead of state 'ready', there's no button: the error says why. Don't tell
   the user to tap anything.
-- After calling, tell the user to tap the button to continue. When they leave the Atomic screen, you
-  get a transact-finished or transact-closed event, and Atomic's webhooks tell you when the switch
-  starts and finishes.
+- After calling, tell the user to sign in to the company to update their direct deposit, naming it,
+  as the system prompt says. When they leave the Atomic screen, you get a transact-finished or
+  transact-closed event, and Atomic's webhooks tell you when the switch starts and finishes.
 - The app shows only the newest button, so a new one replaces any earlier button; never tell the
   user to tap an earlier one.`,
 
