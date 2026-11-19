@@ -26,11 +26,12 @@ follow-up about a company you found. Don't call it on every turn.
   own distributionTypes.
 - isFranchiseParent: a brand, not an employer. The franchisee running the user's location pays them.
 - requiresEmployerName: a payroll system whose sign-in differs for each employer, such as Workday.
-  Find the employer by searching with this system's connector._id as connectorId. If the user can't
-  say, the button still works: the Atomic screen asks them for their employer.
+  Find the employer by searching with this system's connector._id as connectorId. If the user won't
+  say who they work for, don't prepare the button: you need the employer first.
 - connector: the payroll system the company uses by default.
 - alternativeConnectors: other payroll systems behind this company. When present, only the user
-  knows which one pays them. If they don't know, the Atomic screen asks them.`,
+  knows which one pays them. If they don't know, help them work it out in the chat; don't prepare
+  the button until they've picked one.`,
 
   schema: {
     type: 'object',
