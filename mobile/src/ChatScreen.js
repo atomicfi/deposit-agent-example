@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Animated,
+  Easing,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -19,6 +20,7 @@ import pick from 'lodash/pick'
 import { connect, sendMessage, sendTransactEvent } from './api'
 import { launchTransact } from './transact'
 import { useTheme } from './theme'
+import { WorkLogLive, WorkLogSummary, useReducedMotion, useTypewriter } from './WorkLog'
 
 // Atomic's icon, shown on the Transact button. Rendered from Atomic's logo.svg as PNGs
 // at 1x, 2x and 3x, since the app doesn't draw SVGs.
@@ -38,7 +40,18 @@ export default function ChatScreen() {
   // Whether the agent is working on a turn, from the server.
   const [busy, setBusy] = useState(false)
   const [connected, setConnected] = useState(false)
+  // When the running turn started, for the timer and the "Worked for" line.
+  const [turnStartedAt, setTurnStartedAt] = useState(null)
+  const turnStart = useRef(null)
+  // The reply that's typing out, which holds back the Transact button it brings.
+  const [typingId, setTypingId] = useState(null)
   const listRef = useRef(null)
+
+  useEffect(() => {
+    if (busy && turnStart.current === null) turnStart.current = Date.now()
+    if (!busy) turnStart.current = null
+    setTurnStartedAt(turnStart.current)
+  }, [busy])
 
   const addError = (text) =>
     setMessages((m) => [...m, { id: Crypto.randomUUID(), role: 'agent', text, error: true }])
@@ -48,8 +61,14 @@ export default function ChatScreen() {
   useEffect(
     () =>
       connect((event) => {
-        if (event.type === 'message') setMessages((m) => [...m, event.message])
-        else if (event.type === 'busy') setBusy(event.busy)
+        if (event.type === 'message') {
+          // A reply that ends a turn says how long it took, and types out.
+          const started = turnStart.current
+          const message =
+            started === null ? event.message : { ...event.message, durationMs: Date.now() - started }
+          if (started !== null) setTypingId(message.id)
+          setMessages((m) => [...m, message])
+        } else if (event.type === 'busy') setBusy(event.busy)
         else if (event.type === 'error') addError(event.error)
       }, setConnected),
     []
@@ -65,7 +84,7 @@ export default function ChatScreen() {
     queueForAgent(() => sendMessage(text))
   }
 
-  // Sends something to the agent's queue. Shows the typing indicator until the
+  // Sends something to the agent's queue. Shows the loading state until the
   // server reports on the turn, or right away hides it if nothing was queued.
   async function queueForAgent(request) {
     setBusy(true)
@@ -81,15 +100,24 @@ export default function ChatScreen() {
   }
 
   // Newest first, for the inverted list below. An inverted list is anchored to
-  // its bottom edge, so the newest message and the typing indicator stay in view
-  // when the keyboard or the Transact button takes up room.
+  // its bottom edge, so the newest message and the loading state stay in view
+  // when the keyboard, the Transact button, or a reply typing out takes up room.
   const thread = useMemo(() => [...messages].reverse(), [messages])
 
-  // The latest Transact action, pinned above the composer.
-  const transactAction = useMemo(
-    () => messages.findLast((m) => m.action?.type === 'launch_transact')?.action ?? null,
+  // The latest Transact action, pinned above the composer once the reply that
+  // offers it has finished typing.
+  const transactMessage = useMemo(
+    () => messages.findLast((m) => m.action?.type === 'launch_transact') ?? null,
     [messages]
   )
+  const transactAction = transactMessage?.id === typingId ? null : (transactMessage?.action ?? null)
+
+  const placeholder = busy
+    ? 'One moment…'
+    : messages.some((m) => m.role === 'user')
+      ? 'Type your answer'
+      : 'Who pays you?'
+  const canSend = !busy && !!input.trim()
 
   return (
     <View style={styles.screen}>
@@ -110,8 +138,8 @@ export default function ChatScreen() {
       >
         {messages.length === 0 && !busy ? (
           // The welcome screen sits outside the inverted list, which would flip it.
-          // It gives way to the list as soon as the agent is busy, so the typing
-          // indicator shows even before the first message.
+          // It gives way to the list as soon as the agent is busy, so the loading
+          // state shows even before the first message.
           <ScrollView
             style={styles.flex}
             contentContainerStyle={[styles.list, styles.listEmpty]}
@@ -130,9 +158,21 @@ export default function ChatScreen() {
             keyExtractor={(m) => m.id}
             keyboardDismissMode="interactive"
             keyboardShouldPersistTaps="handled"
-            renderItem={({ item }) => <Message item={item} styles={styles} theme={theme} />}
+            renderItem={({ item }) => (
+              <Message
+                item={item}
+                styles={styles}
+                theme={theme}
+                typing={item.id === typingId}
+                onTyped={() => setTypingId((id) => (id === item.id ? null : id))}
+              />
+            )}
             // In an inverted list the header renders at the bottom, under the newest message.
-            ListHeaderComponent={busy ? <TypingIndicator styles={styles} /> : null}
+            ListHeaderComponent={
+              busy && turnStartedAt !== null ? (
+                <WorkLogLive startedAt={turnStartedAt} theme={theme} />
+              ) : null
+            }
           />
         )}
 
@@ -148,35 +188,30 @@ export default function ChatScreen() {
           />
         )}
 
-        <View
-          style={[
-            styles.composer,
-            transactAction && styles.composerJoined,
-            { paddingBottom: Math.max(insets.bottom, 12) }
-          ]}
-        >
+        <View style={[styles.composer, { paddingBottom: 12 + insets.bottom }]}>
           <TextInput
             style={styles.input}
             value={input}
             onChangeText={setInput}
-            placeholder="Message Direct Deposit Assistant…"
+            placeholder={placeholder}
             placeholderTextColor={theme.muted}
             multiline
+            maxLength={2000}
             submitBehavior="submit"
             returnKeyType="send"
             onSubmitEditing={() => send(input)}
           />
           <Pressable
             accessibilityLabel="Send"
-            disabled={busy || !input.trim()}
+            disabled={!canSend}
             onPress={() => send(input)}
             style={({ pressed }) => [
               styles.send,
-              (busy || !input.trim()) && styles.sendDisabled,
+              !canSend && styles.sendDisabled,
               pressed && styles.sendPressed
             ]}
           >
-            <Text style={styles.sendIcon}>↑</Text>
+            <ArrowUp styles={styles} />
           </Pressable>
         </View>
       </KeyboardAvoidingView>
@@ -188,6 +223,17 @@ function Avatar({ styles, large }) {
   return (
     <View style={[styles.avatar, large && styles.avatarLarge]}>
       <Text style={[styles.avatarText, large && styles.avatarTextLarge]}>A</Text>
+    </View>
+  )
+}
+
+// An up arrow drawn without SVG: a stem, and a chevron made from a square's
+// corner turned 45°.
+function ArrowUp({ styles }) {
+  return (
+    <View style={styles.arrow}>
+      <View style={styles.arrowHead} />
+      <View style={styles.arrowStem} />
     </View>
   )
 }
@@ -215,28 +261,44 @@ function Welcome({ styles, onPick }) {
   )
 }
 
-function Message({ item, styles, theme }) {
+function Message({ item, styles, theme, typing, onTyped }) {
   if (item.role === 'user') {
+    return <UserMessage item={item} styles={styles} />
+  }
+  if (item.error) {
     return (
-      <View style={[styles.row, styles.rowUser]}>
-        <View style={[styles.bubble, styles.userBubble]}>
-          <Text style={styles.userText}>{item.text}</Text>
-        </View>
+      <View style={[styles.agentMessage, styles.errorBubble]}>
+        <Text style={styles.errorText}>{item.text}</Text>
       </View>
     )
   }
+  return <AgentMessage item={item} theme={theme} typing={typing} onTyped={onTyped} styles={styles} />
+}
+
+function UserMessage({ item, styles }) {
+  const reduced = useReducedMotion()
+  const opacity = useRef(new Animated.Value(0.4)).current
+  useEffect(() => {
+    Animated.timing(opacity, {
+      toValue: 1,
+      duration: reduced ? 0 : 200,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: true
+    }).start()
+  }, [opacity, reduced])
   return (
-    <View style={styles.row}>
-      <Avatar styles={styles} />
-      <View style={styles.agentColumn}>
-        <View style={[styles.bubble, styles.agentBubble, item.error && styles.errorBubble]}>
-          {item.error ? (
-            <Text style={styles.errorText}>{item.text}</Text>
-          ) : (
-            <Markdown style={markdownStyles(theme)}>{item.text}</Markdown>
-          )}
-        </View>
-      </View>
+    <Animated.View style={[styles.userBubble, { opacity }]}>
+      <Text style={styles.userText}>{item.text}</Text>
+    </Animated.View>
+  )
+}
+
+function AgentMessage({ item, theme, typing, onTyped, styles }) {
+  const text = useTypewriter(item.text, { animate: typing, onDone: onTyped })
+  return (
+    <View style={styles.agentMessage}>
+      {item.durationMs !== undefined && <WorkLogSummary durationMs={item.durationMs} theme={theme} />}
+      {!!text && <Markdown style={markdownStyles(theme)}>{text}</Markdown>}
     </View>
   )
 }
@@ -248,7 +310,6 @@ function TransactBar({ action, styles, onFinish, onClose }) {
   const [status, setStatus] = useState('idle')
   // The company's logo from the backend, shown on the button when there is one.
   const logo = action.logo?.url ? action.logo : null
-
   function open() {
     setStatus('open')
     try {
@@ -325,40 +386,11 @@ function TransactBar({ action, styles, onFinish, onClose }) {
   )
 }
 
-function TypingIndicator({ styles }) {
-  const dots = useRef([0, 1, 2].map(() => new Animated.Value(0.3))).current
-  useEffect(() => {
-    const anims = dots.map((v, i) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(i * 150),
-          Animated.timing(v, { toValue: 1, duration: 300, useNativeDriver: true }),
-          Animated.timing(v, { toValue: 0.3, duration: 300, useNativeDriver: true }),
-          Animated.delay((2 - i) * 150)
-        ])
-      )
-    )
-    anims.forEach((a) => a.start())
-    return () => anims.forEach((a) => a.stop())
-  }, [dots])
-
-  return (
-    <View style={styles.row} accessibilityLabel="Assistant is typing">
-      <Avatar styles={styles} />
-      <View style={[styles.bubble, styles.agentBubble, styles.typing]}>
-        {dots.map((v, i) => (
-          <Animated.View key={i} style={[styles.typingDot, { opacity: v }]} />
-        ))}
-      </View>
-    </View>
-  )
-}
-
 const markdownStyles = (t) => ({
-  body: { color: t.text, fontSize: 16, lineHeight: 22 },
-  paragraph: { marginTop: 0, marginBottom: 6 },
-  bullet_list: { marginBottom: 6 },
-  ordered_list: { marginBottom: 6 },
+  body: { color: t.text, fontSize: 15, lineHeight: 24 },
+  paragraph: { marginTop: 0, marginBottom: 8 },
+  bullet_list: { marginBottom: 8 },
+  ordered_list: { marginBottom: 8 },
   strong: { fontWeight: '600' },
   link: { color: t.accent },
   code_inline: { backgroundColor: t.codeBg, color: t.text, borderRadius: 4, fontSize: 14 },
@@ -375,9 +407,9 @@ const makeStyles = (t) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      paddingHorizontal: 16,
+      paddingHorizontal: 24,
       paddingBottom: 12,
-      backgroundColor: t.surface,
+      backgroundColor: t.bg,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: t.border
     },
@@ -391,40 +423,31 @@ const makeStyles = (t) =>
       width: 32,
       height: 32,
       borderRadius: 16,
-      // Atomic's brand purple (indigo-500 on docs.atomicfi.com).
-      backgroundColor: '#6035DB',
+      backgroundColor: t.accent,
       alignItems: 'center',
       justifyContent: 'center'
     },
     avatarLarge: { width: 60, height: 60, borderRadius: 30 },
-    avatarText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+    avatarText: { color: t.accentText, fontWeight: '600', fontSize: 14 },
     avatarTextLarge: { fontSize: 24 },
 
-    list: { padding: 16, gap: 14 },
+    list: { paddingHorizontal: 24, paddingVertical: 16, gap: 20 },
     listEmpty: { flexGrow: 1, justifyContent: 'center' },
 
-    row: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-    rowUser: { justifyContent: 'flex-end' },
-    bubble: { maxWidth: '80%', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20 },
-    userBubble: { backgroundColor: t.accent, borderBottomRightRadius: 6 },
-    userText: { color: t.accentText, fontSize: 16, lineHeight: 22 },
-    agentBubble: {
-      maxWidth: '100%',
-      backgroundColor: t.agentBubble,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: t.border,
-      borderBottomLeftRadius: 6,
-      paddingBottom: 4
-    },
-    agentColumn: { flexShrink: 1, maxWidth: '80%', gap: 8, alignItems: 'flex-start' },
-    actionBar: {
+    userBubble: {
+      alignSelf: 'flex-end',
+      maxWidth: '85%',
+      backgroundColor: t.accent,
+      borderRadius: 8,
       paddingHorizontal: 16,
-      paddingTop: 12,
-      paddingBottom: 4,
-      backgroundColor: t.surface,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: t.border
+      paddingVertical: 8
     },
+    userText: { color: t.accentText, fontSize: 15, lineHeight: 24 },
+    agentMessage: { alignSelf: 'stretch', gap: 12 },
+    errorBubble: { backgroundColor: t.errorBg, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 12 },
+    errorText: { color: t.errorText, fontSize: 15, lineHeight: 24 },
+
+    actionBar: { paddingHorizontal: 24, paddingTop: 4, paddingBottom: 16 },
     actionButton: {
       backgroundColor: t.surface,
       minHeight: 60,
@@ -473,19 +496,14 @@ const makeStyles = (t) =>
       borderRadius: 16,
       borderWidth: 1,
       borderColor: t.border,
-      backgroundColor: t.bg,
+      backgroundColor: t.sheet,
       alignItems: 'center',
       justifyContent: 'center'
     },
     actionDoneText: { color: t.text, fontSize: 16, fontWeight: '600' },
-    actionNote: { color: t.muted, fontSize: 13, marginTop: 8, textAlign: 'center' },
-    errorBubble: { backgroundColor: t.errorBg, borderColor: 'transparent', paddingBottom: 10 },
-    errorText: { color: t.errorText, fontSize: 16, lineHeight: 22 },
+    actionNote: { color: t.muted, fontSize: 13, textAlign: 'center' },
 
-    typing: { flexDirection: 'row', gap: 5, paddingVertical: 15, paddingBottom: 15 },
-    typingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: t.muted },
-
-    welcome: { alignItems: 'center', paddingHorizontal: 12 },
+    welcome: { alignItems: 'center' },
     welcomeTitle: { fontSize: 24, fontWeight: '700', color: t.text, marginTop: 14 },
     welcomeText: {
       fontSize: 15,
@@ -493,7 +511,7 @@ const makeStyles = (t) =>
       textAlign: 'center',
       marginTop: 6,
       marginBottom: 18,
-      lineHeight: 21
+      lineHeight: 24
     },
     suggestions: { gap: 10, alignItems: 'center' },
     chip: {
@@ -510,38 +528,51 @@ const makeStyles = (t) =>
     composer: {
       flexDirection: 'row',
       alignItems: 'flex-end',
-      gap: 10,
-      paddingHorizontal: 12,
-      paddingTop: 10,
-      backgroundColor: t.surface,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: t.border
+      gap: 8,
+      paddingTop: 12,
+      paddingLeft: 24,
+      paddingRight: 16,
+      backgroundColor: t.sheet,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20
     },
-    // Under the Transact bar, which already draws the divider.
-    composerJoined: { borderTopWidth: 0 },
     input: {
       flex: 1,
       maxHeight: 140,
-      minHeight: 42,
-      paddingHorizontal: 16,
-      paddingTop: 11,
-      paddingBottom: 11,
-      borderRadius: 21,
-      borderWidth: 1,
-      borderColor: t.border,
-      backgroundColor: t.bg,
+      minHeight: 40,
+      paddingTop: 10,
+      paddingBottom: 10,
       color: t.text,
-      fontSize: 16
+      fontSize: 15
     },
     send: {
-      width: 42,
-      height: 42,
-      borderRadius: 21,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
       backgroundColor: t.accent,
       alignItems: 'center',
       justifyContent: 'center'
     },
     sendDisabled: { opacity: 0.4 },
     sendPressed: { transform: [{ scale: 0.94 }] },
-    sendIcon: { color: t.accentText, fontSize: 22, fontWeight: '700', marginTop: -2 }
+    arrow: { width: 20, height: 20, alignItems: 'center' },
+    arrowHead: {
+      position: 'absolute',
+      top: 5,
+      width: 10,
+      height: 10,
+      borderTopWidth: 2,
+      borderLeftWidth: 2,
+      borderColor: t.accentText,
+      borderTopLeftRadius: 1,
+      transform: [{ rotate: '45deg' }]
+    },
+    arrowStem: {
+      position: 'absolute',
+      top: 5,
+      bottom: 4,
+      width: 2,
+      borderRadius: 1,
+      backgroundColor: t.accentText
+    }
   })
